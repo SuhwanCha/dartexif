@@ -1,6 +1,11 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
-class IfdTag {
+import 'package:json_annotation/json_annotation.dart';
+part 'exif_types.g.dart';
+
+@JsonSerializable()
+class IfdTag<T extends IfdValues> {
   /// tag ID number
   final int tag;
 
@@ -10,17 +15,40 @@ class IfdTag {
   final String printable;
 
   /// list of data items (int(char or number) or Ratio)
-  final IfdValues values;
+  @IfdTagConverter()
+  final T values;
 
-  IfdTag({
+  const IfdTag({
     required this.tag,
     required this.tagType,
     required this.printable,
     required this.values,
   });
 
+  // json serialization
+
+  factory IfdTag.fromJson(Map<String, dynamic> json) =>
+      _$IfdTagFromJson<T>(json);
+
+  Map<String, dynamic> toJson() => _$IfdTagToJson<T>(this);
+
   @override
   String toString() => printable;
+}
+
+class IfdTagConverter<T extends IfdValues>
+    implements JsonConverter<T, Map<String, dynamic>> {
+  const IfdTagConverter();
+
+  @override
+  T fromJson(Map<String, dynamic> json) {
+    return Map<String, dynamic>.from(json) as T;
+  }
+
+  @override
+  Map<String, dynamic> toJson(T object) {
+    return {};
+  }
 }
 
 abstract class IfdValues {
@@ -33,8 +61,16 @@ abstract class IfdValues {
   int firstAsInt();
 }
 
+@JsonSerializable()
 class IfdNone extends IfdValues {
   const IfdNone();
+
+  // json serialization
+
+  factory IfdNone.fromJson(Map<String, dynamic> json) =>
+      _$IfdNoneFromJson(json);
+
+  Map<String, dynamic> toJson() => _$IfdNoneToJson(this);
 
   @override
   List toList() => [];
@@ -49,10 +85,18 @@ class IfdNone extends IfdValues {
   String toString() => "[]";
 }
 
+@JsonSerializable(explicitToJson: true)
 class IfdRatios extends IfdValues {
   final List<Ratio> ratios;
 
   const IfdRatios(this.ratios);
+
+  // json serialization
+
+  factory IfdRatios.fromJson(Map<String, dynamic> json) =>
+      _$IfdRatiosFromJson(json);
+
+  Map<String, dynamic> toJson() => _$IfdRatiosToJson(this);
 
   @override
   List toList() => ratios;
@@ -67,10 +111,18 @@ class IfdRatios extends IfdValues {
   String toString() => ratios.toString();
 }
 
+@JsonSerializable()
 class IfdInts extends IfdValues {
   final List<int> ints;
 
   const IfdInts(this.ints);
+
+  // json serialization
+
+  factory IfdInts.fromJson(Map<String, dynamic> json) =>
+      _$IfdIntsFromJson(json);
+
+  Map<String, dynamic> toJson() => _$IfdIntsToJson(this);
 
   @override
   List toList() => ints;
@@ -85,10 +137,18 @@ class IfdInts extends IfdValues {
   String toString() => ints.toString();
 }
 
+@JsonSerializable(explicitToJson: true)
 class IfdBytes extends IfdValues {
-  final Uint8List bytes;
-
   IfdBytes(this.bytes);
+
+  // json serialization
+  factory IfdBytes.fromJson(Map<String, dynamic> json) =>
+      _$IfdBytesFromJson(json);
+
+  Map<String, dynamic> toJson() => _$IfdBytesToJson(this);
+
+  @Uint8ListConverter()
+  final Uint8List bytes;
 
   IfdBytes.empty() : bytes = Uint8List(0);
 
@@ -107,8 +167,23 @@ class IfdBytes extends IfdValues {
   String toString() => bytes.toString();
 }
 
+class Uint8ListConverter implements JsonConverter<Uint8List, String> {
+  const Uint8ListConverter();
+
+  @override
+  Uint8List fromJson(String json) {
+    return Uint8List.fromList(base64.decode(json));
+  }
+
+  @override
+  String toJson(Uint8List object) {
+    return base64.encode(object);
+  }
+}
+
 /// Ratio object that eventually will be able to reduce itself to lowest
 /// common denominator for printing.
+///
 class Ratio {
   final int numerator;
   final int denominator;
@@ -128,6 +203,13 @@ class Ratio {
     return Ratio._internal(num, den);
   }
 
+  // json serialization
+
+  List<int> toJson() => const RatioConvertor().toJson(this);
+
+  factory Ratio.fromJson(List<int> json) =>
+      const RatioConvertor().fromJson(json);
+
   Ratio._internal(this.numerator, this.denominator);
 
   @override
@@ -137,6 +219,20 @@ class Ratio {
   int toInt() => numerator ~/ denominator;
 
   double toDouble() => numerator / denominator;
+}
+
+class RatioConvertor implements JsonConverter<Ratio, List<int>> {
+  const RatioConvertor();
+
+  @override
+  Ratio fromJson(List<int> json) {
+    return Ratio(json[0], json[1]);
+  }
+
+  @override
+  List<int> toJson(Ratio object) {
+    return [object.numerator, object.denominator];
+  }
 }
 
 class ExifData {
